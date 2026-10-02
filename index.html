@@ -1,0 +1,153 @@
+html
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Telegram TG Racing</title>
+    <script src="https://telegram.org"></script>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        canvas { display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<script>
+    // Ініціалізація Telegram Web App
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand(); // Розгортаємо гру на весь екран
+
+    // Налаштування гри Phaser
+    const config = {
+        type: Phaser.AUTO,
+        width: 360,
+        height: 640,
+        physics: {
+            default: 'arcade',
+            arcade: { debug: false }
+        },
+        scene: { preload: preload, create: create, update: update }
+    };
+
+    const game = new Phaser.Game(config);
+    let player;
+    let obstacles;
+    let road;
+    let score = 0;
+    let scoreText;
+    let gameOver = false;
+    let speed = 5;
+
+    function preload() {
+        // Генеруємо прості текстури кодом, щоб не завантажувати зовнішні картинки
+        // Траса (сірий колір)
+        let roadGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        roadGraphics.fillStyle(0x444444, 1);
+        roadGraphics.fillRect(0, 0, 360, 640);
+        // Розмітка
+        roadGraphics.fillStyle(0xffffff, 1);
+        roadGraphics.fillRect(175, 0, 10, 640);
+        roadGraphics.generateTexture('road', 360, 640);
+
+        // Гравець (синя машинка)
+        let playerGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        playerGraphics.fillStyle(0x0077ff, 1);
+        playerGraphics.fillRect(0, 0, 40, 70);
+        playerGraphics.generateTexture('player_car', 40, 70);
+
+        // Перешкода (червона машинка або блок)
+        let obstacleGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        obstacleGraphics.fillStyle(0xff3333, 1);
+        obstacleGraphics.fillRect(0, 0, 40, 70);
+        obstacleGraphics.generateTexture('obstacle', 40, 70);
+    }
+
+    function create() {
+        // Додаємо дорогу (TileSprite для ефекту нескінченного руху)
+        road = this.add.tileSprite(180, 320, 360, 640, 'road');
+
+        // Додаємо гравця
+        player = this.physics.add.sprite(180, 540, 'player_car');
+        player.setCollideWorldBounds(true);
+
+        // Група для перешкод
+        obstacles = this.physics.add.group();
+
+        // Таймер появи перешкод (кожні 1.5 секунди)
+        this.time.addEvent({
+            delay: 1500,
+            callback: spawnObstacle,
+            callbackScope: this,
+            loop: true
+        });
+
+        // Рахунок гри
+        scoreText = this.add.text(15, 15, 'Очки: 0', { fontSize: '24px', fill: '#fff', fontFamily: 'Arial' });
+
+        // Колізія (зіткнення)
+        this.physics.add.overlap(player, obstacles, hitObstacle, null, this);
+
+        // Керування тапами (для смартфонів)
+        this.input.on('pointerdown', function (pointer) {
+            if (gameOver) return;
+            // Якщо тапнули в лівій частині екрана — машина їде вліво, якщо в правій — вправо
+            if (pointer.x < 180) {
+                player.x -= 60;
+            } else {
+                player.x += 60;
+            }
+        });
+    }
+
+    function update() {
+        if (gameOver) return;
+
+        // Рухаємо дорогу вгору, створюючи ілюзію руху вперед
+        road.tilePositionY -= speed;
+
+        // Рухаємо перешкоди вниз та видаляємо ті, що вилетіли за екран
+        obstacles.children.iterate(function (child) {
+            if (child) {
+                child.y += speed;
+                if (child.y > 680) {
+                    child.destroy();
+                    score += 10;
+                    scoreText.setText('Очки: ' + score);
+                    // Поступове збільшення швидкості
+                    if (score % 50 === 0) speed += 0.5;
+                }
+            }
+        });
+    }
+
+    function spawnObstacle() {
+        if (gameOver) return;
+        // Обираємо випадкову смугу (ліва, центральна, права)
+        const lanes =;
+        const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
+        
+        let obstacle = obstacles.create(randomLane, -50, 'obstacle');
+        obstacle.setImmovable(true);
+    }
+
+    function hitObstacle(player, obstacle) {
+        gameOver = true;
+        this.physics.pause();
+        player.setTint(0xff0000);
+
+        // Показуємо плашку Game Over всередині Telegram
+        tg.showAlert(`💥 Гра закінчена!\nВаш рахунок: ${score}`);
+        
+        // Передаємо дані про результат назад у бот (якщо потрібно)
+        // tg.sendData(JSON.stringify({score: score})); 
+        
+        // Кнопка закриття додатка
+        tg.close();
+    }
+</script>
+
+</body>
+</html>
